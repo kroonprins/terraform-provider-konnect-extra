@@ -31,6 +31,31 @@ data "konnectextra_portal_team" "example" {
 - `can_own_applications` - Whether the team is allowed to own applications.
 - `konnect_managed` - Whether the team's membership is managed by Konnect.
 
+### `konnectextra_application_auth_strategy`
+
+Look up an application auth strategy by its Konnect name (not its portal display name).
+
+```hcl
+data "konnectextra_application_auth_strategy" "example" {
+  name = "My Auth Strategy"
+}
+```
+
+The computed `id` can be used with resources in the official provider. Other computed attributes are `display_name`, `strategy_type`, `active`, `dcr_provider_id` (null if absent), `supports_multiple_credentials`, `created_at`, and `updated_at`.
+
+### `konnectextra_portal_form`
+
+Look up a custom developer portal form by portal ID and name.
+
+```hcl
+data "konnectextra_portal_form" "example" {
+  portal_id = "your-portal-id"
+  name      = "api-registration"
+}
+```
+
+Computed attributes are `id`, `type`, `status`, `created_at`, and `updated_at`. The default `developer_registration` form is only available from this lookup after it has been explicitly created in Konnect.
+
 ## Provider Configuration
 
 ```hcl

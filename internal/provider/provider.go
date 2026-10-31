@@ -109,6 +109,8 @@ func (p *KonnectExtraProvider) Configure(ctx context.Context, req provider.Confi
 func (p *KonnectExtraProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewPortalTeamDataSource,
+		NewApplicationAuthStrategyDataSource,
+		NewPortalFormDataSource,
 	}
 }
 
