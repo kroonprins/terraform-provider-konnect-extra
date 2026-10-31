@@ -1,7 +1,7 @@
 ---
 page_title: "konnect-extra Provider"
 description: |-
-  A supplemental Terraform provider for Kong Konnect, providing data sources not yet available in the official provider.
+  A supplemental Terraform provider for Kong Konnect, providing data sources and resources not yet available in the official provider.
 ---
 
 # konnect-extra Provider

@@ -56,6 +56,29 @@ data "konnectextra_portal_form" "example" {
 
 Computed attributes are `id`, `type`, `status`, `created_at`, and `updated_at`. The default `developer_registration` form is only available from this lookup after it has been explicitly created in Konnect.
 
+## Resources
+
+### `konnectextra_portal_form`
+
+Create and manage a custom developer portal form:
+
+```hcl
+resource "konnectextra_portal_form" "api_registration" {
+  portal_id = konnect_portal.example.id
+  name      = "api-registration"
+  type      = "api_registration"
+  status    = "unpublished"
+  fields_json = jsonencode([
+    { name = "api_id", type = "text", label = "API" },
+    { name = "submit", type = "submit", value = "Register" }
+  ])
+}
+```
+
+`fields_json` accepts the ordered field definitions from the [Konnect Create Form API](https://developer.konghq.com/api/konnect/portal-management/v3/#/operations/create-portal-form). Every form needs exactly one `submit` field. Developer registration forms also require `full_name` and `email` fields, and API registration forms require an `api_id` text field. Changing the portal or form type replaces the form; changing its name, status, or fields updates it in place.
+
+If the official provider adds a portal form resource, migrate without deleting the form: remove this resource from Terraform state, then import the same remote form into the official resource. Check that provider's import ID format and field schema first. A `moved` block is only possible if the official provider explicitly supports moving state from this resource type.
+
 ## Provider Configuration
 
 ```hcl

@@ -38,7 +38,7 @@ func (p *KonnectExtraProvider) Metadata(ctx context.Context, req provider.Metada
 
 func (p *KonnectExtraProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A supplemental provider for Kong Konnect, providing data sources not yet available in the official provider.",
+		MarkdownDescription: "A supplemental provider for Kong Konnect, providing data sources and resources not yet available in the official provider.",
 		Attributes: map[string]schema.Attribute{
 			"server_url": schema.StringAttribute{
 				MarkdownDescription: "The Konnect API server URL. Defaults to `https://global.api.konghq.com`. Configurable via environment variable `KONNECT_SERVER_URL`.",
@@ -104,6 +104,7 @@ func (p *KonnectExtraProvider) Configure(ctx context.Context, req provider.Confi
 	}
 
 	resp.DataSourceData = client
+	resp.ResourceData = client
 }
 
 func (p *KonnectExtraProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
@@ -115,7 +116,9 @@ func (p *KonnectExtraProvider) DataSources(ctx context.Context) []func() datasou
 }
 
 func (p *KonnectExtraProvider) Resources(ctx context.Context) []func() resource.Resource {
-	return nil
+	return []func() resource.Resource{
+		NewPortalFormResource,
+	}
 }
 
 func New(version string) func() provider.Provider {
