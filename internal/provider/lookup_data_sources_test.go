@@ -112,6 +112,49 @@ func TestLookupDataSourcesRead(t *testing.T) {
 		{"invalid JSON", http.StatusOK, `{`, true},
 	}
 
+	runEventGatewayDataSourcesRead := func(t *testing.T) {
+		tests := []struct {
+			name string
+			ds   datasource.DataSource
+			path string
+			body string
+		}{
+			{"gateway", &EventGatewayDataSource{}, "/v1/event-gateways", `{"data":[{"id":"gateway-id","name":"Gateway","min_runtime_version":"1.3","nodes_total":1,"virtual_clusters_total":2,"version":"v1"}]}`},
+			{"backend cluster", &EventGatewayBackendClusterDataSource{}, "/v1/event-gateways/gateway-id/backend-clusters", `{"data":[{"id":"cluster-id","name":"Cluster","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}]}`},
+			{"listener", &EventGatewayListenerDataSource{}, "/v1/event-gateways/gateway-id/listeners", `{"data":[{"id":"listener-id","name":"Listener","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}]}`},
+			{"schema registry", &EventGatewaySchemaRegistryDataSource{}, "/v1/event-gateways/gateway-id/schema-registries", `{"data":[{"id":"registry-id","name":"Registry","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}]}`},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method != http.MethodGet || r.URL.Path != tt.path || r.URL.Query().Get("filter[name][contains]") == "" ||
+						r.URL.Query().Get("page[size]") != "100" {
+						t.Errorf("unexpected request: %s %s", r.Method, r.URL)
+					}
+					fmt.Fprint(w, tt.body)
+				}))
+				defer server.Close()
+				client := &KonnectExtraClient{HTTPClient: server.Client(), ServerURL: server.URL, Token: "test-token"}
+				inputs := map[string]string{"name": "Gateway"}
+				switch ds := tt.ds.(type) {
+				case *EventGatewayDataSource:
+					ds.client = client
+				case *EventGatewayBackendClusterDataSource:
+					ds.client, inputs["name"], inputs["gateway_id"] = client, "Cluster", "gateway-id"
+				case *EventGatewayListenerDataSource:
+					ds.client, inputs["name"], inputs["gateway_id"] = client, "Listener", "gateway-id"
+				case *EventGatewaySchemaRegistryDataSource:
+					ds.client, inputs["name"], inputs["gateway_id"] = client, "Registry", "gateway-id"
+				}
+				req, resp := lookupRequest(t, tt.ds, inputs)
+				tt.ds.Read(context.Background(), req, &resp)
+				if resp.Diagnostics.HasError() {
+					t.Fatalf("unexpected diagnostics: %v", resp.Diagnostics)
+				}
+			})
+		}
+	}
+
 	runNewLookupDataSourcesRead := func(t *testing.T) {
 		tests := []struct {
 			name       string
@@ -258,4 +301,5 @@ func TestLookupDataSourcesRead(t *testing.T) {
 		})
 	}
 	runNewLookupDataSourcesRead(t)
+	runEventGatewayDataSourcesRead(t)
 }

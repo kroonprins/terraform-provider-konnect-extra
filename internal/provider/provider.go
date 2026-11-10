@@ -117,6 +117,10 @@ func (p *KonnectExtraProvider) DataSources(ctx context.Context) []func() datasou
 		NewAPIDataSource,
 		NewAPIsDataSource,
 		NewAPIByNameDataSource,
+		NewEventGatewayDataSource,
+		NewEventGatewayBackendClusterDataSource,
+		NewEventGatewayListenerDataSource,
+		NewEventGatewaySchemaRegistryDataSource,
 	}
 }
 
