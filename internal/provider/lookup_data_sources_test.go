@@ -96,7 +96,7 @@ func TestApplicationAuthStrategyDataSourceRead(t *testing.T) {
 	}
 }
 
-func TestPortalFormDataSourceRead(t *testing.T) {
+func TestLookupDataSourcesRead(t *testing.T) {
 	const success = `{"data":[{"id":"form-id","name":"api-registration","type":"api_registration","status":"published","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}]}`
 	tests := []struct {
 		name      string
@@ -110,6 +110,119 @@ func TestPortalFormDataSourceRead(t *testing.T) {
 		{"duplicate", http.StatusOK, `{"data":[{"name":"api-registration"},{"name":"api-registration"}]}`, true},
 		{"API error", http.StatusNotFound, `{"detail":"portal not found"}`, true},
 		{"invalid JSON", http.StatusOK, `{`, true},
+	}
+
+	runNewLookupDataSourcesRead := func(t *testing.T) {
+		tests := []struct {
+			name       string
+			dataSource datasource.DataSource
+			inputs     map[string]string
+			path       string
+			query      string
+			body       string
+			wantError  bool
+		}{
+			{
+				name:       "portal team",
+				dataSource: &PortalTeamDataSource{},
+				inputs:     map[string]string{"portal_id": "portal-id", "name": "Platform"},
+				path:       "/v3/portals/portal-id/teams",
+				query:      "filter[name][eq]",
+				body:       `{"data":[{"id":"team-id","name":"Platform","description":"Platform team","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z","can_own_applications":true,"konnect_managed":false}]}`,
+			},
+			{
+				name:       "portal developer",
+				dataSource: &PortalDeveloperDataSource{},
+				inputs:     map[string]string{"portal_id": "portal-id", "name": "Jane Doe"},
+				path:       "/v3/portals/portal-id/developers",
+				query:      "filter[name][eq]",
+				body:       `{"data":[{"id":"developer-id","email":"jane@example.com","full_name":"Jane Doe","status":"approved","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}]}`,
+			},
+			{
+				name:       "portal application",
+				dataSource: &PortalApplicationDataSource{},
+				inputs:     map[string]string{"portal_id": "portal-id", "name": "My App"},
+				path:       "/v3/portals/portal-id/applications",
+				query:      "filter[name][eq]",
+				body:       `{"data":[{"id":"application-id","name":"My App","description":null,"client_id":null,"registration_count":2,"auth_strategy":{"id":"strategy-id"},"created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}]}`,
+			},
+			{
+				name:       "catalog APIs",
+				dataSource: &APIsDataSource{},
+				inputs:     map[string]string{"name": "Payments"},
+				path:       "/v3/apis",
+				query:      "filter[name][eq]",
+				body:       `{"data":[{"id":"api-v1","name":"Payments","version":"v1","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"},{"id":"api-v2","name":"Payments","version":"v2","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}],"meta":{"page":{"number":1,"size":100,"total":2}}}`,
+			},
+			{
+				name:       "catalog API by name",
+				dataSource: &APIByNameDataSource{},
+				inputs:     map[string]string{"name": "Payments"},
+				path:       "/v3/apis",
+				query:      "filter[name][eq]",
+				body:       `{"data":[{"id":"api-id","name":"Payments","version":"v1","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}],"meta":{"page":{"number":1,"size":100,"total":1}}}`,
+			},
+			{
+				name:       "catalog API by name and version",
+				dataSource: &APIDataSource{},
+				inputs:     map[string]string{"name": "Payments", "version": "v1"},
+				path:       "/v3/apis",
+				query:      "filter[version][eq]",
+				body:       `{"data":[{"id":"api-id","name":"Payments","version":"v1","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}],"meta":{"page":{"number":1,"size":100,"total":1}}}`,
+			},
+			{
+				name:       "ambiguous catalog API by name",
+				dataSource: &APIByNameDataSource{},
+				inputs:     map[string]string{"name": "Payments"},
+				path:       "/v3/apis",
+				query:      "filter[name][eq]",
+				body:       `{"data":[{"id":"api-v1","name":"Payments"},{"id":"api-v2","name":"Payments"}],"meta":{"page":{"number":1,"size":100,"total":2}}}`,
+				wantError:  true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					expectedQueryValue := tt.inputs["name"]
+					if tt.query == "filter[version][eq]" {
+						expectedQueryValue = tt.inputs["version"]
+					}
+					if r.Method != http.MethodGet || r.URL.Path != tt.path ||
+						r.URL.Query().Get(tt.query) != expectedQueryValue ||
+						r.Header.Get("Authorization") != "Bearer test-token" ||
+						r.Header.Get("Accept") != "application/json" {
+						t.Errorf("unexpected request: %s %s, headers %v", r.Method, r.URL, r.Header)
+					}
+					if r.URL.Path == "/v3/apis" && r.URL.Query().Get("page[size]") != "100" {
+						t.Errorf("expected API page size of 100, got %q", r.URL.Query().Get("page[size]"))
+					}
+					fmt.Fprint(w, tt.body)
+				}))
+				defer server.Close()
+
+				switch d := tt.dataSource.(type) {
+				case *PortalTeamDataSource:
+					d.client = &KonnectExtraClient{HTTPClient: server.Client(), ServerURL: server.URL, Token: "test-token"}
+				case *PortalDeveloperDataSource:
+					d.client = &KonnectExtraClient{HTTPClient: server.Client(), ServerURL: server.URL, Token: "test-token"}
+				case *PortalApplicationDataSource:
+					d.client = &KonnectExtraClient{HTTPClient: server.Client(), ServerURL: server.URL, Token: "test-token"}
+				case *APIsDataSource:
+					d.client = &KonnectExtraClient{HTTPClient: server.Client(), ServerURL: server.URL, Token: "test-token"}
+				case *APIByNameDataSource:
+					d.client = &KonnectExtraClient{HTTPClient: server.Client(), ServerURL: server.URL, Token: "test-token"}
+				case *APIDataSource:
+					d.client = &KonnectExtraClient{HTTPClient: server.Client(), ServerURL: server.URL, Token: "test-token"}
+				}
+
+				req, resp := lookupRequest(t, tt.dataSource, tt.inputs)
+				tt.dataSource.Read(context.Background(), req, &resp)
+				if resp.Diagnostics.HasError() != tt.wantError {
+					t.Fatalf("unexpected diagnostics: %v", resp.Diagnostics)
+				}
+			})
+		}
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -144,4 +257,5 @@ func TestPortalFormDataSourceRead(t *testing.T) {
 			}
 		})
 	}
+	runNewLookupDataSourcesRead(t)
 }

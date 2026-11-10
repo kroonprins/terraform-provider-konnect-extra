@@ -56,6 +56,16 @@ data "konnectextra_portal_form" "example" {
 
 Computed attributes are `id`, `type`, `status`, `created_at`, and `updated_at`. The default `developer_registration` form is only available from this lookup after it has been explicitly created in Konnect.
 
+### Portal developers and applications
+
+`konnectextra_portal_developer` looks up a developer by `portal_id` and full `name`; `konnectextra_portal_application` looks up an application by `portal_id` and `name`. Both fail unless exactly one result matches.
+
+### Catalog APIs
+
+- `konnectextra_api` looks up exactly one API by `name` and `version`.
+- `konnectextra_apis` lists all APIs with a `name`.
+- `konnectextra_api_by_name` looks up exactly one API by `name`, failing when no API or multiple APIs match.
+
 ## Resources
 
 ### `konnectextra_portal_form`

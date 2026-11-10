@@ -112,6 +112,11 @@ func (p *KonnectExtraProvider) DataSources(ctx context.Context) []func() datasou
 		NewPortalTeamDataSource,
 		NewApplicationAuthStrategyDataSource,
 		NewPortalFormDataSource,
+		NewPortalDeveloperDataSource,
+		NewPortalApplicationDataSource,
+		NewAPIDataSource,
+		NewAPIsDataSource,
+		NewAPIByNameDataSource,
 	}
 }
 

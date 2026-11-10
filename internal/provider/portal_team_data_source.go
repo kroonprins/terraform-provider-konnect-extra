@@ -164,10 +164,10 @@ func (d *PortalTeamDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	if len(apiResp.Data) == 0 {
+	if len(apiResp.Data) != 1 || apiResp.Data[0].Name != teamName {
 		resp.Diagnostics.AddError(
-			"Team not found",
-			fmt.Sprintf("No team with name %q found in portal %q.", teamName, portalID),
+			"Team not found or ambiguous",
+			fmt.Sprintf("Expected exactly one team with name %q in portal %q.", teamName, portalID),
 		)
 		return
 	}
