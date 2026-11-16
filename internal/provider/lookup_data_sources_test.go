@@ -35,6 +35,37 @@ func lookupRequest(t *testing.T, d datasource.DataSource, inputs map[string]stri
 	}, datasource.ReadResponse{State: tfsdk.State{Schema: schemaResp.Schema}}
 }
 
+func portalApplicationLookupRequestWithOwner(t *testing.T, d datasource.DataSource, ownerID, ownerType string) (datasource.ReadRequest, datasource.ReadResponse) {
+	t.Helper()
+	ctx := context.Background()
+	var schemaResp datasource.SchemaResponse
+	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("invalid schema: %v", schemaResp.Diagnostics)
+	}
+	objectType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	values := make(map[string]tftypes.Value, len(objectType.AttributeTypes))
+	for name, typ := range objectType.AttributeTypes {
+		switch name {
+		case "portal_id":
+			values[name] = tftypes.NewValue(typ, "portal-id")
+		case "name":
+			values[name] = tftypes.NewValue(typ, "My App")
+		case "owner":
+			ownerTypeSchema := typ.(tftypes.Object)
+			values[name] = tftypes.NewValue(ownerTypeSchema, map[string]tftypes.Value{
+				"id":   tftypes.NewValue(ownerTypeSchema.AttributeTypes["id"], ownerID),
+				"type": tftypes.NewValue(ownerTypeSchema.AttributeTypes["type"], ownerType),
+			})
+		default:
+			values[name] = tftypes.NewValue(typ, nil)
+		}
+	}
+	return datasource.ReadRequest{
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: tftypes.NewValue(objectType, values)},
+	}, datasource.ReadResponse{State: tfsdk.State{Schema: schemaResp.Schema}}
+}
+
 func TestApplicationAuthStrategyDataSourceRead(t *testing.T) {
 	const success = `{"data":[{"id":"strategy-id","name":"API & Key","display_name":"API Key","strategy_type":"key_auth","active":true,"dcr_provider":null,"supports_multiple_credentials":true,"created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}]}`
 	tests := []struct {
@@ -302,4 +333,23 @@ func TestLookupDataSourcesRead(t *testing.T) {
 	}
 	runNewLookupDataSourcesRead(t)
 	runEventGatewayDataSourcesRead(t)
+}
+
+func TestPortalApplicationDataSourceOwnerFilter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("filter[name][eq]") != "My App" ||
+			r.URL.Query().Get("filter[developer_id][eq]") != "developer-id" ||
+			r.URL.Query().Get("filter[team_id][eq]") != "" {
+			t.Errorf("unexpected query: %s", r.URL.RawQuery)
+		}
+		fmt.Fprint(w, `{"data":[{"id":"application-id","name":"My App","registration_count":0,"auth_strategy":{"id":"strategy-id"},"created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-03T03:04:05Z"}]}`)
+	}))
+	defer server.Close()
+
+	d := &PortalApplicationDataSource{lookupDataSource: lookupDataSource{client: &KonnectExtraClient{HTTPClient: server.Client(), ServerURL: server.URL, Token: "test-token"}}}
+	req, resp := portalApplicationLookupRequestWithOwner(t, d, "developer-id", "developer")
+	d.Read(context.Background(), req, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", resp.Diagnostics)
+	}
 }

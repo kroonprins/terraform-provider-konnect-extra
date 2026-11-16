@@ -163,15 +163,21 @@ type portalApplicationAPIItem struct {
 type PortalApplicationDataSource struct{ lookupDataSource }
 
 type PortalApplicationDataSourceModel struct {
-	PortalID          types.String  `tfsdk:"portal_id"`
-	Name              types.String  `tfsdk:"name"`
-	ID                types.String  `tfsdk:"id"`
-	Description       types.String  `tfsdk:"description"`
-	ClientID          types.String  `tfsdk:"client_id"`
-	AuthStrategyID    types.String  `tfsdk:"auth_strategy_id"`
-	RegistrationCount types.Float64 `tfsdk:"registration_count"`
-	CreatedAt         types.String  `tfsdk:"created_at"`
-	UpdatedAt         types.String  `tfsdk:"updated_at"`
+	PortalID          types.String                           `tfsdk:"portal_id"`
+	Name              types.String                           `tfsdk:"name"`
+	Owner             *PortalApplicationOwnerDataSourceModel `tfsdk:"owner"`
+	ID                types.String                           `tfsdk:"id"`
+	Description       types.String                           `tfsdk:"description"`
+	ClientID          types.String                           `tfsdk:"client_id"`
+	AuthStrategyID    types.String                           `tfsdk:"auth_strategy_id"`
+	RegistrationCount types.Float64                          `tfsdk:"registration_count"`
+	CreatedAt         types.String                           `tfsdk:"created_at"`
+	UpdatedAt         types.String                           `tfsdk:"updated_at"`
+}
+
+type PortalApplicationOwnerDataSourceModel struct {
+	ID   types.String `tfsdk:"id"`
+	Type types.String `tfsdk:"type"`
 }
 
 func NewPortalApplicationDataSource() datasource.DataSource { return &PortalApplicationDataSource{} }
@@ -184,8 +190,16 @@ func (d *PortalApplicationDataSource) Schema(ctx context.Context, req datasource
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Look up a portal application by portal ID and name.",
 		Attributes: map[string]schema.Attribute{
-			"portal_id":          requiredStringAttribute("The ID of the portal."),
-			"name":               requiredStringAttribute("The name of the application to look up."),
+			"portal_id": requiredStringAttribute("The ID of the portal."),
+			"name":      requiredStringAttribute("The name of the application to look up."),
+			"owner": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "Optionally restrict the lookup to an application owned by a developer or team.",
+				Attributes: map[string]schema.Attribute{
+					"id":   requiredStringAttribute("The owner ID. A developer ID when type is developer, or a team ID when type is team."),
+					"type": requiredStringAttribute("The owner type: developer or team."),
+				},
+			},
 			"id":                 computedStringAttribute("The ID of the application."),
 			"description":        computedStringAttribute("The description of the application."),
 			"client_id":          computedStringAttribute("The identity provider client ID, if any."),
@@ -210,6 +224,20 @@ func (d *PortalApplicationDataSource) Read(ctx context.Context, req datasource.R
 
 	var apiResp portalApplicationAPIResponse
 	query := url.Values{"filter[name][eq]": []string{data.Name.ValueString()}}
+	if data.Owner != nil {
+		switch data.Owner.Type.ValueString() {
+		case "developer":
+			query.Set("filter[developer_id][eq]", data.Owner.ID.ValueString())
+		case "team":
+			query.Set("filter[team_id][eq]", data.Owner.ID.ValueString())
+		default:
+			resp.Diagnostics.AddError(
+				"Invalid portal application owner type",
+				fmt.Sprintf("Owner type must be %q or %q, got %q.", "developer", "team", data.Owner.Type.ValueString()),
+			)
+			return
+		}
+	}
 	if err := d.get(ctx, fmt.Sprintf("/v3/portals/%s/applications", url.PathEscape(data.PortalID.ValueString())), query, &apiResp); err != nil {
 		resp.Diagnostics.AddError("Error looking up portal application", err.Error())
 		return
